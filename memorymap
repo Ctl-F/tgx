@@ -1,0 +1,68 @@
+Date: 10/10/2024
+Max Resolution 640x480
+Max Memory for a FrameBuffer: 640x480*4 = 1228800 (<1.18MB)
+Max Framebuffers (layers): 3 => 3.52MG FrameBuffer VRAM
+
+Frame Buffer Bytes: 0x00384000
+
+RGB 640x480 FrameBuffer: E1000 bytes
+
+
+16 Bit Pallet
+Pallet Entry: 0x4 * 0xFFFF = 0x0003FFFC (262140bytes ~256kb)
+
+1 Frame Buffer: 640*480*2 = 0x96000 (614400 bytes ~600kb)
+3 Frame Buffers: 0x1C2000 (1843200 bytes ~1800kb ~1.76MB)
+Decompression Buffer: 640*480*4 = 1228800 bytes
+
+Total for Decompression Buffer, 3 Frame Buffers at max res, + pallet): 3334140bytes 3.18mb
+
+
+8 Bit Pallet: 0x4 * 0xFF = 1024bytes (1kb)
+
+1 Frame Buffer: 640*480 = 307200bytes (300kb)
+3 Frame Buffers: 900kb
+Decompression Buffer: 640*480*4 = 1228800bytes
+
+Total for 8bit pallet, 3 frame buffers, and decompression: 2151424 bytes (2.05mb)
+
+RGB 640x480 Framebuffers (3) of them - 2764800 bytes (2700kb) 0x002A3000
+
+Keyboard Buffer: 48 (0x30) bytes * 2
+                     0x60  bytes
+
+
+// layout:
+System Memory:  4mb  0x00000000 - 0x003FFFFF
+User Memory:    4mb  0x00400000 - 0x007FFFFF
+Cartridge Page: 2mb  0x00800000 - 0x009FFFFF
+
+0x00000000 - 0x003FFFFF **System Space**
+0x00000000 (u64) Reserved NULL
+0x00000008 (u8) Console Version Major
+0x00000009 (u8) Console Version Minor
+0x0000000A (u16) Console Version Patch
+0x0000000C (char[7]) 'TGX-64\0'
+0x00000018 (u64) Console Boot Timestamp (ms)
+0x00000020 (u64) Time Since Boot (ms)
+0x00000028 (u64) Random Frame Number 0
+0x00000030 (u64) Random Frame Number 1
+
+0x00000000 - 0x00000FFF *System Information*
+
+0x00001000 (u32) Keyboard Buffer Input Current Frame [flags]
+0x00001004 (u32) Keyboard Buffer Input Last Frame [flags]
+
+0x00001100 (float[16]) Projection Matrix
+0x00001140 (float[16]) View Matrix
+0x00001180 (float[16]) Model Matrix
+0x000011C0 (float[4])  Color Tint (rgb[a])
+0x000011D0 (float[2])  UV Wave Offset { UV.x += float[0] * sin(float[1] * UV.y); }
+
+0x0015D000 - 0x003FFFFF Video Ram (Frame Buffer 0 - Frame Buffer 2)
+0x0015D000 - 0x0023DFFF Frame Buffer 0
+0x0023E000 - 0x0031EFFF Frame Buffer 1
+0x0031F000 - 0x003FFFFF Frame Buffer 2
+
+0x00400000 - 0x007FFFFF **User Space**
+0x00800000 - 0x009FFFFF **Memory Card Page**
