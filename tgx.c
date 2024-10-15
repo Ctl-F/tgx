@@ -1,21 +1,30 @@
 #include "library.h"
 #include "string.h"
 #include <math.h>
-#define __USE_TIME_BITS64
 #include <time.h>
 
 static char sConsoleRam[TGX_TOTAL_CONSOLE_RAM] = { 0 };
 
-static char* sConsoleStart = sConsoleRam;
-static char* sConsoleEnd = sConsoleRam + TGX_TOTAL_CONSOLE_RAM;
-static char* sSystemSpaceStart = sConsoleRam;
-static char* sSystemSpaceEnd = sConsoleRam + TGX_SYSTEM_MEMORY_SIZE;
-static char* sUserSpaceStart = sSystemSpaceEnd;
-static char* sUserSpaceEnd = sUserSpaceStart + TGX_USER_MEMORY_SIZE;
-static char* sMemoryCardStart = sUserSpaceEnd;
-static char* sMemoryCardEnd = sMemoryCardStart + TGX_MEMORY_CARD_PAGE_SIZE;
+//static char* sConsoleStart = sConsoleRam;
+//static char* sConsoleEnd = sConsoleRam + TGX_TOTAL_CONSOLE_RAM;
+//static char* sSystemSpaceStart = sConsoleRam;
+//static char* sSystemSpaceEnd = sConsoleRam + TGX_SYSTEM_MEMORY_SIZE;
+//static char* sUserSpaceStart = sSystemSpaceEnd;
+//static char* sUserSpaceEnd = sUserSpaceStart + TGX_USER_MEMORY_SIZE;
+//static char* sMemoryCardStart = sUserSpaceEnd;
+//static char* sMemoryCardEnd = sMemoryCardStart + TGX_MEMORY_CARD_PAGE_SIZE;
+
+static char* sConsoleStart;
+static char* sConsoleEnd;
+static char* sSystemSpaceStart;
+static char* sSystemSpaceEnd;
+static char* sUserSpaceStart;
+static char* sUserSpaceEnd;
+static char* sMemoryCardStart;
+static char* sMemoryCardEnd;
 
 const uint8_t* tgx_get_system_version_major(void) {
+    //(void*)sConsoleStart; (void*)sConsoleEnd; // REMOVE ME
     return (uint8_t*)(sSystemSpaceStart + TGXP_SYSTEM_VERSION_MAJOR);
 }
 const uint8_t* tgx_get_system_version_minor(void) {
@@ -75,6 +84,15 @@ void* tgx_get_system_ram_end(void) {
 }
 
 static void tgx_init_system_memory(void) {
+    sConsoleStart = sConsoleRam;
+    sConsoleEnd = sConsoleRam + TGX_TOTAL_CONSOLE_RAM;
+    sSystemSpaceStart = sConsoleRam;
+    sSystemSpaceEnd = sSystemSpaceStart + TGX_SYSTEM_MEMORY_SIZE;
+    sUserSpaceStart = sSystemSpaceEnd;
+    sUserSpaceEnd = sUserSpaceStart + TGX_USER_MEMORY_SIZE;
+    sMemoryCardStart = sUserSpaceEnd;
+    sMemoryCardEnd = sMemoryCardStart + TGX_MEMORY_CARD_PAGE_SIZE;
+
     TGXVAL(uint8_t, sSystemSpaceStart + TGXP_SYSTEM_VERSION_MAJOR) = TGX_VERSION_MAJOR;
     TGXVAL(uint8_t, sSystemSpaceStart + TGXP_SYSTEM_VERSION_MINOR) = TGX_VERSION_MINOR;
     TGXVAL(uint16_t, sSystemSpaceStart + TGXP_SYSTEM_VERSION_PATCH) = TGX_VERSION_PATCH;
@@ -116,7 +134,14 @@ static void tgx_init_system_memory(void) {
     *uni = 0.0f; ++uni; *uni = 0.0f;
 }
 static void tgx_update_system_memory(void) {
+    time_t _time = time(NULL);
+    TGXVAL(uint64_t, sSystemSpaceStart + TGXP_SYSTEM_UP_TIME) =
+        _time - TGXVAL(uint64_t, sSystemSpaceStart + TGXP_SYSTEM_BOOT_TIME);
 
+    TGXVAL(uint32_t, sSystemSpaceStart + TGXP_SYSTEM_RANDOM_BUFFER +  0) = rand();
+    TGXVAL(uint32_t, sSystemSpaceStart + TGXP_SYSTEM_RANDOM_BUFFER +  4) = rand();
+    TGXVAL(uint32_t, sSystemSpaceStart + TGXP_SYSTEM_RANDOM_BUFFER +  8) = rand();
+    TGXVAL(uint32_t, sSystemSpaceStart + TGXP_SYSTEM_RANDOM_BUFFER + 12) = rand();
 }
 
 // PIXEL SHADER
@@ -126,10 +151,13 @@ static const char * const TGX_PIXEL_VERTEX_SHADER =
     "layout (location = 1) in vec3 tgxNormal;\n"
     "layout (location = 2) in vec2 tgxUv;\n"
     "layout (location = 3) in vec4 tgxColor;\n"
+    "uniform mat4 tgxMatProjection;\n"
+    "uniform mat4 tgxMatView;\n"
+    "uniform mat4 tgxMatModel;\n"
     "out vec2 fUv;\n"
     "out vec4 fColor;\n"
     "void main(){\n"
-    "  gl_Position = vec4(tgxPosition, 1.0);\n"
+    "  gl_Position = tgxMatProjection * tgxMatView * tgxMatModel * vec4(tgxPosition, 1.0);\n"
     "  fUv = tgxUv;\n"
     "  fColor = tgxColor;\n"
     "}\n";
@@ -156,6 +184,7 @@ static tgxVertexFormat s_DefaultVertexFormat = {
 };
 
 tgxVertexFormat* tgx_vmode_get_default_format(void) {
+    (void*)TGX_PIXEL_FRAGMENT_SHADER; (void*)TGX_PIXEL_VERTEX_SHADER; // REMOVE ME
     return &s_DefaultVertexFormat;
 }
 
@@ -394,9 +423,8 @@ void tgx_destroy_window(tgxWindow* window) {
 }
 
 void tgx_set_window_monitor(tgxContext* window, tgxEnum monitor) {
-    int width, height;
-    width = tgx_get_width(window->resolution);
-    height = tgx_get_height(window->resolution);
+    int width = tgx_get_width(window->resolution);
+    int height = tgx_get_height(window->resolution);
 
     if(monitor == TGX_MONITOR_NONE) {
         glfwSetWindowMonitor(window->display_handle, NULL, 0, 0, width, height, 60);
@@ -422,6 +450,10 @@ int tgx_get_window_height(tgxContext *context) {
 void tgx_poll_events(tgxContext* ctx) {
     glfwPollEvents();
     tgx_update_frame_inputs(ctx->display_handle);
+
+    if(glfwWindowShouldClose(ctx->display_handle)) {
+        tgx_clear_flag(TGX_FLAG_POWER);
+    }
 }
 
 void tgx_swap_buffers(tgxWindow* window) {
@@ -433,6 +465,7 @@ void tgx_context_initialize(void) {
 }
 
 void tgx_context_terminate(void) {
+    // TODO: deinit vertex/pixel context
     glfwTerminate();
 }
 
@@ -447,10 +480,14 @@ tgxResult tgx_context_prepare(tgxContext *context) {
 }
 
 int tgx_get_window_is_open(tgxWindow* window) {
-    return !glfwWindowShouldClose(window);
+    return tgx_get_flag(TGX_FLAG_POWER);
 }
 void tgx_set_window_should_close(tgxWindow* window, int close) {
-    glfwSetWindowShouldClose(window, close);
+    if(close) {
+        tgx_clear_flag(TGX_FLAG_POWER);
+        return;
+    }
+    tgx_set_flag(TGX_FLAG_POWER);
 }
 
 double tgx_get_time(void) {
@@ -675,6 +712,11 @@ tgxResult tgx_vmode_set_instance_shader(tgxVertexInstances *instances, tgxVertex
 }
 
 tgxResult tgx_vmode_present_instance(tgxVertexInstances *instances, tgxVertexInstanceID instance, tgxEnum primitive_type, tgxUniformData* uniforms, uint32_t uniform_count) {
+    static float s_mat_identity[16] = { 1.0f, 0.0f, 0.0f, 0.0f,
+                                     0.0f, 1.0f, 0.0f, 0.0f,
+                                     0.0f, 0.0f, 1.0f, 0.0f,
+                                     0.0f, 0.0f, 0.0f, 1.0f };
+
     if(!tgx_vmode_instance_valid(instances, instance)) {
         TGX_THROW("Instance provided for presentation is not valid.", TGX_ERROR_INSTANCE_NOT_FOUND);
         return TGX_ERR;
@@ -685,6 +727,18 @@ tgxResult tgx_vmode_present_instance(tgxVertexInstances *instances, tgxVertexIns
     glBindVertexArray(packet->vao);
     glBindBuffer(GL_ARRAY_BUFFER, packet->vbo);
     glUseProgram(packet->program_id);
+
+
+
+    if(TGXVAL(uint32_t, TGXP_SYSTEM_FLAGS + sSystemSpaceStart) & TGX_FLAG_UPLOAD_DEFAULT_UNIS) {
+        GLuint proj = glGetUniformLocation(packet->program_id, "tgxMatUniform");
+        GLuint view = glGetUniformLocation(packet->program_id, "tgxMatView");
+        GLuint model = glGetUniformLocation(packet->program_id, "tgxMatModel");
+
+        glUniform1fv(packet->program_id, proj, TGXREF(float, sSystemSpaceStart + TGXP_SYSTEM_UNIFORM_PROJ_MATRIX));
+        glUniform1fv(packet->program_id, view, TGXREF(float, sSystemSpaceStart + TGXP_SYSTEM_UNIFORM_VIEW_MATRIX));
+        glUniform1fv(packet->program_id, model, TGXREF(float, sSystemSpaceStart + TGXP_SYSTEM_UNIFORM_MODEL_MATRIX));
+    }
 
     for(uint32_t i=0; i<uniform_count; i++) {
         GLuint loc = glGetUniformLocation(packet->program_id, uniforms->name);
@@ -857,55 +911,66 @@ tgxResult tgx_initialize_vector_mode(tgxContext* context) {
 
 
 int tgx_vmode_instance_valid(tgxVertexInstances* instances, tgxVertexInstanceID id) {
-    return id < instances->instance_count && instances->instances[id].vao != 0;
+    return (instances != NULL && instances->instances != NULL) && id < instances->instance_count && instances->instances[id].vao != 0;
 }
 
-//static uint32_t s_OpenGL_VAO;
-//static uint32_t s_OpenGL_VBO;
 
-/*
 tgxResult tgx_initialize_pixel_mode(tgxContext* context) {
-    int width, height;
-    tgx_get_size(context->resolution, &width, &height);
-
-    if(s_PixelFrameBuffer != NULL) {
-        tgx_free(s_PixelFrameBuffer);
-    }
-
-    int count = width * height * sizeof(uint32_t);
-    s_PixelFrameBuffer = tgx_alloc(count);
-    if(s_PixelFrameBuffer == NULL) {
+    context->graphics_context = malloc(sizeof(tgxPixelContext));
+    if(context->graphics_context == NULL) {
+        TGX_THROW("Out of Memory", TGX_ERROR_NO_MEMORY);
         return TGX_ERR;
     }
-    s_PixelFrameBufferLength = count;
 
-    s_PixelFrameBufferVertices = tgx_alloc(sizeof(tgxVertex) * 6);
-    if(s_PixelFrameBufferVertices == NULL) {
-        tgx_free(s_PixelFrameBuffer);
+    tgxPixelContext* pContext = (tgxPixelContext*)context->graphics_context;
+
+    if(tgx_vmode_init_vector_instances(&(pContext->vector_context.instances)) != TGX_OK) {
         return TGX_ERR;
     }
-    s_PixelFrameBufferVerticesLength = 6;
 
-    s_PixelFrameBufferVertices[0] = tgxVertex{ 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1};
-    s_PixelFrameBufferVertices[1] = tgxVertex{ 1, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1};
-    s_PixelFrameBufferVertices[2] = tgxVertex{ 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1};
+    tgxVertex buffer[6] = {
+        (tgxVertex){ .position = { 0.0f, 0.0f, 0.0f}, .normal = {0.0f, 0.0f, -1.0f}, .uv = {0.0f, 0.0f}, .color = {1.0f, 1.0f, 1.0f, 1.0f} },
+        (tgxVertex){ .position = { 1.0f, 0.0f, 0.0f}, .normal = {0.0f, 0.0f, -1.0f}, .uv = {1.0f, 0.0f}, .color = {1.0f, 1.0f, 1.0f, 1.0f} },
+        (tgxVertex){ .position = { 0.0f, 1.0f, 0.0f}, .normal = {0.0f, 0.0f, -1.0f}, .uv = {0.0f, 1.0f}, .color = {1.0f, 1.0f, 1.0f, 1.0f} },
+        (tgxVertex){ .position = { 0.0f, 1.0f, 0.0f}, .normal = {0.0f, 0.0f, -1.0f}, .uv = {0.0f, 1.0f}, .color = {1.0f, 1.0f, 1.0f, 1.0f} },
+        (tgxVertex){ .position = { 1.0f, 0.0f, 0.0f}, .normal = {0.0f, 0.0f, -1.0f}, .uv = {1.0f, 0.0f}, .color = {1.0f, 1.0f, 1.0f, 1.0f} },
+        (tgxVertex){ .position = { 1.0f, 1.0f, 0.0f}, .normal = {0.0f, 0.0f, -1.0f}, .uv = {1.0f, 1.0f}, .color = {1.0f, 1.0f, 1.0f, 1.0f} },
+    };
 
-    s_PixelFrameBufferVertices[3] = tgxVertex{ 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1};
-    s_PixelFrameBufferVertices[4] = tgxVertex{ 1, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1};
-    s_PixelFrameBufferVertices[5] = tgxVertex{ 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1};
+    pContext->framebuffer_instance = tgx_vmode_create_instance(&(pContext->vector_context.instances), s_DefaultVertexFormat, buffer, sizeof(buffer), TGX_STATIC_MEMORY_HINT);
 
-    glGenVertexArrays(1, &s_OpenGL_VAO);
-    glBindVertexArray(s_OpenGL_VAO);
+    if(tgx_vmode_compile_shader(TGX_PIXEL_VERTEX_SHADER, TGX_PIXEL_FRAGMENT_SHADER,&pContext->shader) != TGX_OK){
+        tgx_vmode_deinit_vector_instances(&(pContext->vector_context.instances));
+        free(context->graphics_context);
+        context->graphics_context = NULL;
+        return TGX_ERR;
+    }
+    tgx_vmode_set_instance_shader(&pContext->vector_context.instances, pContext->framebuffer_instance, pContext->shader);
 
-    glGenBuffers(1, &s_OpenGL_VBO);
-    glBindBuffer(GL_ARRAY_BUFFER, s_OpenGL_VBO);
+    tgx_get_size(context->resolution, &pContext->width, &pContext->height);
 
-    glBufferData(GL_ARRAY_BUFFER, s_PixelFrameBufferVerticesLength * sizeof(tgxVertex), s_PixelFrameBufferVertices, GL_STATIC_DRAW);
+    uint32_t texture_length;
+    uint8_t *data = tgx_get_framebuffer(context, &texture_length);
 
+    tgxTextureSubmitInfo info = {0};
+    info.width = pContext->width;
+    info.height = pContext->height;
+    info.data = data;
+    info.border_policy = TGX_TEXTURE_REPEAT;
+    info.format = TGX_RGB;
+    info.desired_format = TGX_RGBA;
+    info.min_filter = TGX_FILTER_NEAREST;
+    info.mag_filter = TGX_FILTER_NEAREST;
+    info.existing_handle = TGX_TEXTURE_NULL;
+
+    pContext->framebuffer_handle = tgx_submit_texture(&info);
+
+    tgx_set_flag(TGX_FLAG_UPLOAD_DEFAULT_UNIS);
+    //tgx_mat4_build_ortho(TGXREF(float, sSystemSpaceStart + TGXP_SYSTEM_UNIFORM_PROJ_MATRIX), 0.0f, 0.0f, 1.0f, 1.0f, 0.1f, 1.0f);
 
     return TGX_OK;
 }
-*/
+
 
 void tgx_mat4_build_identity(float mat[16]) {
     mat[ 0] = 1.0f; mat[ 1] = 0.0f; mat[ 2] = 0.0f; mat[ 3] = 0.0f;
@@ -1061,11 +1126,93 @@ void tgx_mat4_build_lookat(float mat[16],
     mat[15] = 1.0f;
 }
 
+void tgx_assign_texture_slot(int slot, tgxTexture texture) {
+    glActiveTexture(GL_TEXTURE0 + slot);
+    glBindTexture(GL_TEXTURE_2D, texture);
+}
+
+tgxTexture tgx_submit_texture(const tgxTextureSubmitInfo* info) {
+    GLuint tex;
+    if(info->existing_handle == TGX_TEXTURE_NULL) {
+        glGenTextures(1, &tex);
+    }
+    else {
+        tex = info->existing_handle;
+    }
+
+    glBindTexture(GL_TEXTURE_2D, tex);
+
+    GLenum wrap;
+    GLenum min_filter;
+    GLenum mag_filter;
+
+    switch(info->border_policy) {
+        default:
+        case TGX_TEXTURE_REPEAT: wrap = GL_REPEAT; break;
+        case TGX_TEXTURE_MIRROR: wrap = GL_MIRRORED_REPEAT; break;
+        case TGX_TEXTURE_CLAMP: wrap = GL_CLAMP_TO_EDGE; break;
+    }
+
+    switch(info->min_filter) {
+        default:
+        case TGX_FILTER_NEAREST:
+            min_filter = GL_NEAREST; break;
+        case TGX_FILTER_LINEAR:
+            min_filter = GL_LINEAR;
+    }
+
+    switch(info->mag_filter) {
+        default:
+        case TGX_FILTER_NEAREST:
+            mag_filter = GL_NEAREST; break;
+        case TGX_FILTER_LINEAR:
+            mag_filter = GL_LINEAR;
+    }
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, min_filter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, mag_filter);
+
+    GLenum sourcefmt, destfmt;
+
+    switch(info->format) {
+        default:
+        case TGX_RGB:
+            sourcefmt = GL_RGB; break;
+        case TGX_RGBA:
+            sourcefmt = GL_RGBA; break;
+    }
+
+
+    switch(info->desired_format) {
+        default:
+        case TGX_RGB:
+            destfmt = GL_RGB; break;
+        case TGX_RGBA:
+            destfmt = GL_RGBA; break;
+    }
+
+    glTexImage2D(GL_TEXTURE_2D, 0, destfmt, info->width, info->height, 0, sourcefmt, GL_UNSIGNED_BYTE, info->data);
+
+    if(info->generate_mipmaps) {
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    return tex;
+}
+
+void tgx_delete_texture(tgxTexture texture) {
+    glDeleteTextures(1, &texture);
+}
+
 #endif
 
 void tgx_get_size(tgxEnum resolution, int* width, int* height) {
-    int w = 0;
-    int h = 0;
+    int w;
+    int h;
 
     switch(resolution) {
         case TGX_CONFIG_TINY:
@@ -1103,8 +1250,19 @@ int tgx_get_height(tgxEnum resolution) {
     return res;
 }
 
+int tgx_get_flag(tgxEnum flag) {
+    return TGXVAL(uint32_t, sSystemSpaceStart + TGXP_SYSTEM_FLAGS) & flag;
+}
+void tgx_set_flag(tgxEnum flag) {
+    TGXVAL(uint32_t, sSystemSpaceStart + TGXP_SYSTEM_FLAGS) |= flag;
+}
+void tgx_clear_flag(tgxEnum flag) {
+    TGXVAL(uint32_t, sSystemSpaceStart + TGXP_SYSTEM_FLAGS) &= (~flag);
+}
+
 tgxResult tgx_initialize(const tgxConfigInfo* info, tgxContext *context) {
     tgx_init_allocations();
+    tgx_init_system_memory();
     tgx_context_initialize();
     tgx_context_hint(TGX_PROFILE_MAJOR, TGX_PROFILE_MINOR, TGX_PROFILE);
 
@@ -1127,6 +1285,7 @@ tgxResult tgx_initialize(const tgxConfigInfo* info, tgxContext *context) {
     }
 
     context->resolution = info->resolution;
+    context->mode = info->graphics_mode;
 
     if(info->graphics_mode == TGX_MODE_VECTOR) {
         if(tgx_initialize_vector_mode(context) != TGX_OK) {
@@ -1134,7 +1293,14 @@ tgxResult tgx_initialize(const tgxConfigInfo* info, tgxContext *context) {
             return TGX_ERR;
         }
     }
-    // TODO: else
+    else {
+        if(tgx_initialize_pixel_mode(context) != TGX_OK) {
+            tgx_shutdown(context);
+            return TGX_ERR;
+        }
+    }
+
+    tgx_set_flag(TGX_FLAG_POWER);
 
     return TGX_OK;
 }
@@ -1149,15 +1315,80 @@ tgxResult tgx_shutdown(tgxContext* context) {
 
 void tgx_run(tgxContext* context, TGXUpdateFunc func) {
     double time = tgx_get_time();
-    while(tgx_get_window_is_open(context->display_handle)) {
+    while(tgx_get_flag(TGX_FLAG_POWER)) {
         double delta = tgx_get_time() - time;
         time = tgx_get_time();
 
-        if(!func(time, context)) {
+        tgx_update_system_memory();
+        if(context->mode == TGX_MODE_PIXEL) {
+            tgx_begin_frame(context);
+        }
+
+        if(!func(delta, context)) {
             tgx_set_window_should_close(context->display_handle, true);
+        }
+
+        if(context->mode == TGX_MODE_PIXEL) {
+            tgx_end_frame(context);
         }
 
         tgx_poll_events(context);
         tgx_swap_buffers(context->display_handle);
     }
+}
+
+void tgx_begin_frame(tgxContext*  context) {
+    (void*)context;
+}
+
+void tgx_end_frame(tgxContext* context) {
+    tgxPixelContext *pContext = (tgxPixelContext*)context->graphics_context;
+
+    tgxTextureSubmitInfo info = {0};
+    tgx_get_size(context->resolution, &info.width, &info.height);
+    info.data = tgx_get_framebuffer(context, NULL);
+    info.border_policy = TGX_TEXTURE_REPEAT;
+    info.min_filter = TGX_FILTER_NEAREST;
+    info.mag_filter = TGX_FILTER_NEAREST;
+    info.format = TGX_RGB;
+    info.desired_format = TGX_RGBA;
+    info.generate_mipmaps = false;
+    info.existing_handle = pContext->framebuffer_handle;
+
+    pContext->framebuffer_handle = tgx_submit_texture(&info);
+
+    tgxUniformData uniforms[1];
+    uniforms[0].name = "framebuffer";
+    uniforms[0].type = TGX_VTYPE_INT1;
+    uniforms[0].i1 = 0;
+
+    tgx_assign_texture_slot(0, pContext->framebuffer_handle);
+    tgx_vmode_present_instance(&pContext->vector_context.instances, pContext->framebuffer_instance, TGX_TRIANGLE_LIST, uniforms, 0);
+}
+
+void tgx_clear_framebuffer(tgxContext* context, uint8_t r, uint8_t g, uint8_t b) {
+    uint32_t length;
+    uint8_t* fb = tgx_get_framebuffer(context, &length);
+
+    int64_t _length = length;
+
+    while(_length > 0) {
+        fb[0] = r;
+        fb[1] = g;
+        fb[2] = b;
+        fb += 3;
+        _length -= 3;
+    }
+}
+
+uint8_t* tgx_get_framebuffer(tgxContext* context, uint32_t* length) {
+    int width, height, len;
+    tgx_get_size(context->resolution, &width, &height);
+    len = width * height * 3;
+
+    if(length != NULL) {
+        *length = len;
+    }
+
+    return TGXREF(uint8_t, sSystemSpaceEnd - len);
 }

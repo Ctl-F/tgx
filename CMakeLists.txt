@@ -14,4 +14,4 @@ add_executable(tgx library.c
         tgx.c
 )
 
-target_link_libraries(tgx glfw)
+target_link_libraries(tgx glfw m)

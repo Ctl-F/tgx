@@ -52,6 +52,12 @@ Cartridge Page: 2mb  0x00800000 - 0x009FFFFF
 
 0x00001000 (u32) Keyboard Buffer Input Current Frame [flags]
 0x00001004 (u32) Keyboard Buffer Input Last Frame [flags]
+0x00001008 (u32) Mouse Position X
+0x0000100C (u32) Mouse Position Y
+0x00001010 (u8) Mouse Button Current Frame [Flags]
+0x00001011 (u8) Mouse Button Last Frame [Flags]
+0x00001012 (char[8]) Keyboard Text Buffer
+
 
 0x00001100 (float[16]) Projection Matrix
 0x00001140 (float[16]) View Matrix

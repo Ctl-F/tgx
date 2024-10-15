@@ -160,8 +160,14 @@ void tgx_print_error(FILE* out, const tgxErrorInfo* info);
 #define TGX_BTN_PAUSE TGX_BTN_7
 #define TGX_BTN_COUNT 12
 
-#define TGX_FLAG_NONE         0x00000000000000000000000000000000
-#define TGX_FLAG_SHUTDOWN     0b00000000000000000000000000000001
+#define TGX_FLAG_NONE         0b00000000000000000000000000000000
+#define TGX_FLAG_POWER        0b00000000000000000000000000000001
+#define TGX_FLAG_UPLOAD_DEFAULT_UNIS  0b00000000000000000000000000000010
+
+
+int tgx_get_flag(tgxEnum flag);
+void tgx_set_flag(tgxEnum flag);
+void tgx_clear_flag(tgxEnum flag);
 
 #define TGX_BUFFER_FLAG_CLEAR 0x00000001
 
@@ -255,6 +261,33 @@ typedef struct {
 } tgxVertexPacket;
 
 typedef uint32_t tgxProgram;
+typedef uint32_t tgxTexture;
+
+#define TGX_RGB 0
+#define TGX_RGBA 1
+
+#define TGX_TEXTURE_REPEAT 0
+#define TGX_TEXTURE_MIRROR 1
+#define TGX_TEXTURE_CLAMP 2
+
+#define TGX_FILTER_NEAREST 0
+#define TGX_FILTER_LINEAR 1
+
+#define TGX_TEXTURE_NULL 0
+
+typedef struct {
+    uint32_t width;
+    uint32_t height;
+    void *data;
+    tgxEnum format;
+    tgxEnum desired_format;
+    tgxEnum border_policy;
+    tgxEnum min_filter;
+    tgxEnum mag_filter;
+    int generate_mipmaps;
+    tgxTexture existing_handle;
+} tgxTextureSubmitInfo;
+
 
 #endif
 
@@ -304,13 +337,19 @@ typedef struct {
 } tgxVectorContext;
 
 typedef struct {
-
+    tgxVectorContext vector_context;
+    tgxVertexInstanceID framebuffer_instance;
+    tgxProgram shader;
+    tgxTexture framebuffer_handle;
+    int width;
+    int height;
 } tgxPixelContext;
 
 typedef struct {
     tgxWindow* display_handle;
     tgxEnum resolution;
     void* graphics_context;
+    tgxEnum mode;
 } tgxContext;
 
 typedef int(*TGXUpdateFunc)(double, tgxContext* context);
@@ -380,10 +419,21 @@ tgxVertexFormat* tgx_vmode_get_default_format(void);
 tgxResult tgx_vmode_compile_shader(const char* vdata, const char* fdata, tgxProgram* program);
 void tgx_vmode_destroy_shader(tgxProgram program);
 
+void tgx_begin_frame(tgxContext* context);
+void tgx_end_frame(tgxContext* context);
+uint8_t* tgx_get_framebuffer(tgxContext* context, uint32_t* length);
+
+void tgx_clear_framebuffer(tgxContext* context, uint8_t red, uint8_t green, uint8_t blue);
+
+tgxTexture tgx_submit_texture(const tgxTextureSubmitInfo* info);
+void tgx_assign_texture_slot(int slot, tgxTexture texture);
+void tgx_delete_texture(tgxTexture texture);
+
 // OPTIONAL
 // this can be coded in manually with the other
 // parts of the API if more control is needed
 void tgx_run(tgxContext* context, TGXUpdateFunc func);
+
 
 
 void tgx_mat4_build_identity(float mat[16]);
