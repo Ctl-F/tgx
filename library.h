@@ -18,6 +18,12 @@ typedef int32_t tgxResult;
 #define MEGABYTES(bytes) (KILOBYTES(bytes) * 1024)
 #define GIGABYTES(bytes) (MEGABYTES(bytes) * 1024)
 
+#ifndef NDEBUG
+#define TGX_DEBUG
+#endif
+
+
+
 #ifndef TGX_USER_MEMORY_SIZE
 #define TGX_USER_MEMORY_SIZE (MEGABYTES(4))
 #endif
@@ -251,6 +257,7 @@ typedef GLFWwindow tgxWindow;
 #define TGX_VTYPE_INT4 7
 #define TGX_VTYPE_SAMPLER2D 8
 #define TGX_VTYPE_MAT4 9
+#define TGX_VTYPE_REFMAT4 10
 
 typedef struct {
     uint32_t vao;
@@ -288,6 +295,13 @@ typedef struct {
     tgxTexture existing_handle;
 } tgxTextureSubmitInfo;
 
+void tgx_opengl_assert(const char* call, int line, const char* file);
+
+#ifdef TGX_DEBUG
+#define TGX_GLCALL(a) do { (a); tgx_opengl_assert(#a, __LINE__, __FILE__); } while(false)
+#else
+#define TGX_GLCALL(a) (a)
+#endif
 
 #endif
 
@@ -323,6 +337,7 @@ typedef struct {
         int i2[2];
         int i3[3];
         int i4[4];
+        void* ptr;
     };
 } tgxUniformData;
 

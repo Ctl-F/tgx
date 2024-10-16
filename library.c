@@ -22,6 +22,7 @@ int main(int argc, char** argv) {
     tgxConfigInfo info = {0};
     tgxContext context = {0};
 
+    info.flags = TGX_FLAG_NONE;
     info.resolution = TGX_CONFIG_SMALL;
     info.graphics_mode = TGX_MODE_PIXEL;
     info.title = "Pixel Mode Test";

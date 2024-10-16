@@ -253,6 +253,19 @@ void tgx_clear_errors(void) {
 
 #ifndef TGX_CUSTOM_BACKEND
 
+void tgx_opengl_assert(const char* call, int line, const char* file) {
+    GLenum err;
+    int errors = 0;
+    while((err = glGetError()) != GL_NO_ERROR) {
+        errors++;
+        fprintf(stderr, "OpenGL Error[[ %s ]](0x%x) on line %d in %s", call, err, line, file );
+    }
+    if(errors > 0) {
+        fprintf(stderr, "Aborting due to %d errors\n", errors);
+    }
+}
+
+
 //static int s_KeyFrameInputs[TGX_BTN_COUNT] = { 0 };
 //static int s_KeyLastFrameInputs[TGX_BTN_COUNT] = { 0 };
 
@@ -607,8 +620,8 @@ tgxResult tgx_vmode_setup_attribs(tgxVertexFormat format) {
                 return TGX_ERR;
         }
 
-        glVertexAttribPointer(i, size, type, false, format.stride, (void*)attr.offset);
-        glEnableVertexAttribArray(i);
+        TGX_GLCALL(glVertexAttribPointer(i, size, type, false, format.stride, (void*)attr.offset));
+        TGX_GLCALL(glEnableVertexAttribArray(i));
     }
 
     return TGX_OK;
@@ -628,11 +641,11 @@ tgxVertexInstanceID tgx_vmode_create_instance(tgxVertexInstances *instances, tgx
     instance->program_id = 0;
     instance->vertex_count = buffer_length / format.stride;
 
-    glGenVertexArrays(1, &instance->vao);
-    glBindVertexArray(instance->vao);
+    TGX_GLCALL(glGenVertexArrays(1, &instance->vao));
+    TGX_GLCALL(glBindVertexArray(instance->vao));
 
-    glGenBuffers(1, &instance->vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, instance->vbo);
+    TGX_GLCALL(glGenBuffers(1, &instance->vbo));
+    TGX_GLCALL(glBindBuffer(GL_ARRAY_BUFFER, instance->vbo));
 
     GLenum usage;
     if(usage_hint == TGX_DYNAMIC_MEMORY_HINT) {
@@ -642,7 +655,7 @@ tgxVertexInstanceID tgx_vmode_create_instance(tgxVertexInstances *instances, tgx
         usage = GL_STATIC_DRAW;
     }
 
-    glBufferData(GL_ARRAY_BUFFER, buffer_length, buffer, usage);
+    TGX_GLCALL(glBufferData(GL_ARRAY_BUFFER, buffer_length, buffer, usage));
 
     tgx_vmode_setup_attribs(format);
     tgxErrorInfo errinfo;
@@ -651,8 +664,8 @@ tgxVertexInstanceID tgx_vmode_create_instance(tgxVertexInstances *instances, tgx
         return TGX_VERTEX_INSTANCE_NULL;
     }
 
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
+    TGX_GLCALL(glBindBuffer(GL_ARRAY_BUFFER, 0));
+    TGX_GLCALL(glBindVertexArray(0));
 
     return _id;
 }
@@ -664,8 +677,8 @@ tgxResult tgx_vmode_update_instance(tgxVertexInstances* instances, tgxVertexInst
     }
 
     tgxVertexPacket *packet = &instances->instances[instance];
-    glBindVertexArray(packet->vao);
-    glBindBuffer(GL_ARRAY_BUFFER, packet->vbo);
+    TGX_GLCALL(glBindVertexArray(packet->vao));
+    TGX_GLCALL(glBindBuffer(GL_ARRAY_BUFFER, packet->vbo));
 
     packet->vertex_count = buffer_len / packet->format.stride;
 
@@ -677,10 +690,10 @@ tgxResult tgx_vmode_update_instance(tgxVertexInstances* instances, tgxVertexInst
         usage = GL_STATIC_DRAW;
     }
 
-    glBufferData(GL_ARRAY_BUFFER, buffer_len, buffer, usage);
+    TGX_GLCALL(glBufferData(GL_ARRAY_BUFFER, buffer_len, buffer, usage));
 
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
+    TGX_GLCALL(glBindBuffer(GL_ARRAY_BUFFER, 0));
+    TGX_GLCALL(glBindVertexArray(0));
 
     return TGX_OK;
 }
@@ -692,8 +705,8 @@ void tgx_vmode_destroy_instance(tgxVertexInstances* instances, tgxVertexInstance
 
     tgxVertexPacket *packet = &instances->instances[instance];
 
-    glDeleteBuffers(1, &packet->vbo);
-    glDeleteVertexArrays(1, &packet->vao);
+    TGX_GLCALL(glDeleteBuffers(1, &packet->vbo));
+    TGX_GLCALL(glDeleteVertexArrays(1, &packet->vao));
 
     packet->vao = 0; // this should be enough to set the instance as "invalid" and allow for it to be reused
     packet->vbo = 0;
@@ -724,51 +737,56 @@ tgxResult tgx_vmode_present_instance(tgxVertexInstances *instances, tgxVertexIns
 
     tgxVertexPacket *packet = &instances->instances[instance];
 
-    glBindVertexArray(packet->vao);
-    glBindBuffer(GL_ARRAY_BUFFER, packet->vbo);
-    glUseProgram(packet->program_id);
+    TGX_GLCALL(glBindVertexArray(packet->vao));
+    TGX_GLCALL(glBindBuffer(GL_ARRAY_BUFFER, packet->vbo));
+    TGX_GLCALL(glUseProgram(packet->program_id));
 
 
 
     if(TGXVAL(uint32_t, TGXP_SYSTEM_FLAGS + sSystemSpaceStart) & TGX_FLAG_UPLOAD_DEFAULT_UNIS) {
-        GLuint proj = glGetUniformLocation(packet->program_id, "tgxMatUniform");
-        GLuint view = glGetUniformLocation(packet->program_id, "tgxMatView");
-        GLuint model = glGetUniformLocation(packet->program_id, "tgxMatModel");
+        GLuint proj, view, model;
+        TGX_GLCALL(proj = glGetUniformLocation(packet->program_id, "tgxMatProjection"));
+        TGX_GLCALL(view = glGetUniformLocation(packet->program_id, "tgxMatView"));
+        TGX_GLCALL(model = glGetUniformLocation(packet->program_id, "tgxMatModel"));
 
-        glUniform1fv(packet->program_id, proj, TGXREF(float, sSystemSpaceStart + TGXP_SYSTEM_UNIFORM_PROJ_MATRIX));
-        glUniform1fv(packet->program_id, view, TGXREF(float, sSystemSpaceStart + TGXP_SYSTEM_UNIFORM_VIEW_MATRIX));
-        glUniform1fv(packet->program_id, model, TGXREF(float, sSystemSpaceStart + TGXP_SYSTEM_UNIFORM_MODEL_MATRIX));
+        TGX_GLCALL(glUniformMatrix4fv(proj, 1, GL_FALSE, TGXREF(float, sSystemSpaceStart + TGXP_SYSTEM_UNIFORM_PROJ_MATRIX)));
+        TGX_GLCALL(glUniformMatrix4fv(view, 1, GL_FALSE, TGXREF(float, sSystemSpaceStart + TGXP_SYSTEM_UNIFORM_VIEW_MATRIX)));
+        TGX_GLCALL(glUniformMatrix4fv(model,1, GL_FALSE, TGXREF(float, sSystemSpaceStart + TGXP_SYSTEM_UNIFORM_MODEL_MATRIX)));
     }
 
     for(uint32_t i=0; i<uniform_count; i++) {
-        GLuint loc = glGetUniformLocation(packet->program_id, uniforms->name);
+        GLuint loc;
+        TGX_GLCALL(loc = glGetUniformLocation(packet->program_id, uniforms->name));
         switch(uniforms->type) {
             case TGX_VTYPE_FLOAT1:
-                glUniform1f(loc, uniforms->f1);
+                TGX_GLCALL(glUniform1f(loc, uniforms->f1));
                 break;
             case TGX_VTYPE_FLOAT2:
-                glUniform2f(loc, uniforms->f2[0], uniforms->f2[1]);
+                TGX_GLCALL(glUniform2f(loc, uniforms->f2[0], uniforms->f2[1]));
                 break;
             case TGX_VTYPE_FLOAT3:
-                glUniform3f(loc, uniforms->f3[0], uniforms->f3[1], uniforms->f3[2]);
+                TGX_GLCALL(glUniform3f(loc, uniforms->f3[0], uniforms->f3[1], uniforms->f3[2]));
                 break;
             case TGX_VTYPE_FLOAT4:
-                glUniform4f(loc, uniforms->f4[0], uniforms->f4[1], uniforms->f4[2], uniforms->f4[3]);
+                TGX_GLCALL(glUniform4f(loc, uniforms->f4[0], uniforms->f4[1], uniforms->f4[2], uniforms->f4[3]));
                 break;
             case TGX_VTYPE_INT1:
-                glUniform1i(loc, uniforms->i1);
+                TGX_GLCALL(glUniform1i(loc, uniforms->i1));
                 break;
             case TGX_VTYPE_INT2:
-                glUniform2i(loc, uniforms->i2[0], uniforms->i2[1]);
+                TGX_GLCALL(glUniform2i(loc, uniforms->i2[0], uniforms->i2[1]));
                 break;
             case TGX_VTYPE_INT3:
-                glUniform3i(loc, uniforms->i3[0], uniforms->i3[1], uniforms->i3[2]);
+                TGX_GLCALL(glUniform3i(loc, uniforms->i3[0], uniforms->i3[1], uniforms->i3[2]));
                 break;
             case TGX_VTYPE_INT4:
-                glUniform4i(loc, uniforms->i4[0], uniforms->i4[1], uniforms->i4[2], uniforms->i4[3]);
+                TGX_GLCALL(glUniform4i(loc, uniforms->i4[0], uniforms->i4[1], uniforms->i4[2], uniforms->i4[3]));
                 break;
             case TGX_VTYPE_MAT4:
-                glUniformMatrix4fv(loc, 1, GL_FALSE, uniforms->mat4);
+                TGX_GLCALL(glUniformMatrix4fv(loc, 1, GL_FALSE, uniforms->mat4));
+                break;
+            case TGX_VTYPE_REFMAT4:
+                TGX_GLCALL(glUniformMatrix4fv(loc, 1, GL_FALSE, uniforms->ptr));
                 break;
             case TGX_VTYPE_SAMPLER2D:
                 // TODO: finish
@@ -803,7 +821,7 @@ tgxResult tgx_vmode_present_instance(tgxVertexInstances *instances, tgxVertexIns
             break;
     }
 
-    glDrawArrays(pmode, 0, packet->vertex_count);
+    TGX_GLCALL(glDrawArrays(pmode, 0, packet->vertex_count));
 
     return TGX_OK;
 }
@@ -811,17 +829,17 @@ tgxResult tgx_vmode_present_instance(tgxVertexInstances *instances, tgxVertexIns
 // Function to compile a shader
 static GLuint _compile_shader(GLenum shaderType, const char* shaderSource) {
     GLuint shader = glCreateShader(shaderType);
-    glShaderSource(shader, 1, &shaderSource, NULL);
-    glCompileShader(shader);
+    TGX_GLCALL(glShaderSource(shader, 1, &shaderSource, NULL));
+    TGX_GLCALL(glCompileShader(shader));
 
     // Check compilation status
     GLint success;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+    TGX_GLCALL(glGetShaderiv(shader, GL_COMPILE_STATUS, &success));
     if (!success) {
         char infoLog[512];
-        glGetShaderInfoLog(shader, 512, NULL, infoLog);
+        TGX_GLCALL(glGetShaderInfoLog(shader, 512, NULL, infoLog));
         fprintf(stderr, "Error: Shader compilation failed:\n%s\n", infoLog);
-        glDeleteShader(shader);
+        TGX_GLCALL(glDeleteShader(shader));
 
         TGX_THROW("Error compiling shader. See stderr for details.", TGX_ERROR_COMPILING_SHADER);
         return 0;
@@ -846,16 +864,16 @@ static GLuint _compile_shader_program(const char* vertexData, const char* fragme
 
     // Create and link the shader program
     GLuint shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
+    TGX_GLCALL(glAttachShader(shaderProgram, vertexShader));
+    TGX_GLCALL(glAttachShader(shaderProgram, fragmentShader));
+    TGX_GLCALL(glLinkProgram(shaderProgram));
 
     // Check linking status
     GLint success;
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
+    TGX_GLCALL(glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success));
     if (!success) {
         char infoLog[512];
-        glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
+        TGX_GLCALL(glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog));
         fprintf(stderr, "Error: Shader program linking failed:\n%s\n", infoLog);
         glDeleteProgram(shaderProgram);
         glDeleteShader(vertexShader);
@@ -966,7 +984,8 @@ tgxResult tgx_initialize_pixel_mode(tgxContext* context) {
     pContext->framebuffer_handle = tgx_submit_texture(&info);
 
     tgx_set_flag(TGX_FLAG_UPLOAD_DEFAULT_UNIS);
-    //tgx_mat4_build_ortho(TGXREF(float, sSystemSpaceStart + TGXP_SYSTEM_UNIFORM_PROJ_MATRIX), 0.0f, 0.0f, 1.0f, 1.0f, 0.1f, 1.0f);
+    tgx_mat4_build_ortho(TGXREF(float, sSystemSpaceStart + TGXP_SYSTEM_UNIFORM_PROJ_MATRIX), 0.0f, 0.0f, 1.0f, 1.0f, 0.1f, 10.0f);
+    //tgx_mat4_build(TGXREF(float, sSystemSpaceStart + TGXP_SYSTEM_UNIFORM_VIEW_MATRIX), 0.0f, 0.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f);
 
     return TGX_OK;
 }
@@ -1053,12 +1072,21 @@ void tgx_mat4_build_ortho(float mat[16], float left, float top, float right, flo
 
     mat[0] = 2.0f / (right - left);
     mat[5] = 2.0f / (top - bottom);
-    mat[10] = -2.0f / (far - near);
+    //mat[10] = -2.0f / (far - near);
+
+/*
+   0| 0 1 2 3
+   1| 4 5 6 7
+   2| 8 9 A B
+   3| C D E F
+ **/
+
+    mat[10] = 1.0f / (far - near);
 
     mat[12] = -(right + left) / (right - left);
     mat[13] = -(top + bottom) / (top - bottom);
     mat[14] = -(far + near) / (far - near);
-    mat[15] = 1.0f;
+    //mat[15] = 1.0f;
 }
 
 void tgx_mat4_mul(float mat0[16], float mat1[16], float result[16]) {
@@ -1127,20 +1155,20 @@ void tgx_mat4_build_lookat(float mat[16],
 }
 
 void tgx_assign_texture_slot(int slot, tgxTexture texture) {
-    glActiveTexture(GL_TEXTURE0 + slot);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    TGX_GLCALL(glActiveTexture(GL_TEXTURE0 + slot));
+    TGX_GLCALL(glBindTexture(GL_TEXTURE_2D, texture));
 }
 
 tgxTexture tgx_submit_texture(const tgxTextureSubmitInfo* info) {
     GLuint tex;
     if(info->existing_handle == TGX_TEXTURE_NULL) {
-        glGenTextures(1, &tex);
+        TGX_GLCALL(glGenTextures(1, &tex));
     }
     else {
         tex = info->existing_handle;
     }
 
-    glBindTexture(GL_TEXTURE_2D, tex);
+    TGX_GLCALL(glBindTexture(GL_TEXTURE_2D, tex));
 
     GLenum wrap;
     GLenum min_filter;
@@ -1169,10 +1197,10 @@ tgxTexture tgx_submit_texture(const tgxTextureSubmitInfo* info) {
             mag_filter = GL_LINEAR;
     }
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, min_filter);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, mag_filter);
+    TGX_GLCALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap));
+    TGX_GLCALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap));
+    TGX_GLCALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, min_filter));
+    TGX_GLCALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, mag_filter));
 
     GLenum sourcefmt, destfmt;
 
@@ -1193,13 +1221,13 @@ tgxTexture tgx_submit_texture(const tgxTextureSubmitInfo* info) {
             destfmt = GL_RGBA; break;
     }
 
-    glTexImage2D(GL_TEXTURE_2D, 0, destfmt, info->width, info->height, 0, sourcefmt, GL_UNSIGNED_BYTE, info->data);
+    TGX_GLCALL(glTexImage2D(GL_TEXTURE_2D, 0, destfmt, info->width, info->height, 0, sourcefmt, GL_UNSIGNED_BYTE, info->data));
 
     if(info->generate_mipmaps) {
-        glGenerateMipmap(GL_TEXTURE_2D);
+        TGX_GLCALL(glGenerateMipmap(GL_TEXTURE_2D));
     }
 
-    glBindTexture(GL_TEXTURE_2D, 0);
+    TGX_GLCALL(glBindTexture(GL_TEXTURE_2D, 0));
 
     return tex;
 }
@@ -1363,7 +1391,7 @@ void tgx_end_frame(tgxContext* context) {
     uniforms[0].i1 = 0;
 
     tgx_assign_texture_slot(0, pContext->framebuffer_handle);
-    tgx_vmode_present_instance(&pContext->vector_context.instances, pContext->framebuffer_instance, TGX_TRIANGLE_LIST, uniforms, 0);
+    tgx_vmode_present_instance(&pContext->vector_context.instances, pContext->framebuffer_instance, TGX_TRIANGLE_LIST, uniforms, 1);
 }
 
 void tgx_clear_framebuffer(tgxContext* context, uint8_t r, uint8_t g, uint8_t b) {
